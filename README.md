@@ -34,3 +34,8 @@ Freedom-Bot의 매매 전략은 다음과 같은 기술적 지표와 전략을 �
 4. **신호 누적 기반 거래**:
    - 특정 횟수 이상의 매수 또는 매도 신호가 연속으로 발생할 때만 거래를 실행합니다.
    - 신호 발생 임계값: 3
+
+
+pip install -r requirements.txt
+
+python3 main.py
