@@ -1,12 +1,13 @@
 from binance.client import Client
+import pandas as pd
 
-def get_historical_data(client, symbol, interval, start_str):
+def get_historical_data(client, symbol, interval, start_str, end_str=None):
     try:
-        klines = client.get_historical_klines(symbol, interval, start_str)
+        klines = client.get_historical_klines(symbol, interval, start_str, end_str)
         data = []
         for kline in klines:
             data.append({
-                'open_time': kline[0],
+                'timestamp': kline[0],
                 'open': float(kline[1]),
                 'high': float(kline[2]),
                 'low': float(kline[3]),
@@ -18,13 +19,10 @@ def get_historical_data(client, symbol, interval, start_str):
                 'taker_buy_base_asset_volume': float(kline[9]),
                 'taker_buy_quote_asset_volume': float(kline[10])
             })
-        return data
+        df = pd.DataFrame(data)
+        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+        df.set_index('timestamp', inplace=True)
+        return df
     except Exception as e:
         print(f"An error occurred: {e}")
         return None
-
-def get_multiple_symbols_data(client, symbols, interval, start_str):
-    data = {}
-    for symbol in symbols:
-        data[symbol] = get_historical_data(client, symbol, interval, start_str)
-    return data
