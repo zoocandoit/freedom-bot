@@ -1,8 +1,5 @@
 import requests
-
-# 텔레그램 봇 설정
-TELEGRAM_TOKEN = "YOUR_TELEGRAM_BOT_TOKEN"
-TELEGRAM_CHAT_ID = "YOUR_CHAT_ID"
+from config import TELEGRAM_TOKEN, TELEGRAM_CHAT_ID
 
 def send_telegram_message(message):
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"

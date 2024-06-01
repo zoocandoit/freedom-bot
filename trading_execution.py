@@ -1,34 +1,56 @@
-def place_order(client, symbol, side, quantity, price=None, stop_loss=None, take_profit=None):
+def place_order(client, symbol, side, quantity, price=None, stop_loss=None, take_profit=None, position_side=None):
     try:
         if side == 'BUY':
-            order = client.order_market_buy(
+            order = client.futures_create_order(
                 symbol=symbol,
-                quantity=quantity
+                side='BUY',
+                type='MARKET',
+                quantity=quantity,
+                positionSide=position_side  # 롱 포지션
             )
             if stop_loss:
                 stop_price = price * (1 - stop_loss)
-                client.order_oco_sell(
+                client.futures_create_order(
                     symbol=symbol,
-                    quantity=quantity,
-                    price=take_profit,
+                    side='SELL',
+                    type='STOP_MARKET',
                     stopPrice=stop_price,
-                    stopLimitPrice=stop_price,
-                    stopLimitTimeInForce='GTC'
+                    closePosition=True
+                )
+            if take_profit:
+                take_profit_price = price * (1 + take_profit)
+                client.futures_create_order(
+                    symbol=symbol,
+                    side='SELL',
+                    type='TAKE_PROFIT_MARKET',
+                    stopPrice=take_profit_price,
+                    closePosition=True
                 )
         elif side == 'SELL':
-            order = client.order_market_sell(
+            order = client.futures_create_order(
                 symbol=symbol,
-                quantity=quantity
+                side='SELL',
+                type='MARKET',
+                quantity=quantity,
+                positionSide=position_side  # 숏 포지션
             )
             if stop_loss:
                 stop_price = price * (1 + stop_loss)
-                client.order_oco_buy(
+                client.futures_create_order(
                     symbol=symbol,
-                    quantity=quantity,
-                    price=take_profit,
+                    side='BUY',
+                    type='STOP_MARKET',
                     stopPrice=stop_price,
-                    stopLimitPrice=stop_price,
-                    stopLimitTimeInForce='GTC'
+                    closePosition=True
+                )
+            if take_profit:
+                take_profit_price = price * (1 - take_profit)
+                client.futures_create_order(
+                    symbol=symbol,
+                    side='BUY',
+                    type='TAKE_PROFIT_MARKET',
+                    stopPrice=take_profit_price,
+                    closePosition=True
                 )
         return order
     except Exception as e:

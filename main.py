@@ -12,10 +12,16 @@ from config import STOP_LOSS_PERCENTAGE, TAKE_PROFIT_PERCENTAGE
 # 로깅 설정
 logging.basicConfig(filename='freedom-bot.log', level=logging.INFO, format='%(asctime)s %(message)s')
 
+# 현재 포지션 상태를 추적하기 위한 변수
+current_position = None
+
 def get_asset_balance(client, asset):
     try:
-        balance = client.get_asset_balance(asset)
-        return float(balance['free'])
+        balance = client.futures_account_balance()
+        for item in balance:
+            if item['asset'] == asset:
+                return float(item['balance'])
+        return None
     except Exception as e:
         logging.error(f"Error getting asset balance: {e}")
         send_telegram_message(f"Error getting asset balance: {e}")
@@ -25,6 +31,7 @@ def calculate_quantity(balance, percentage, price):
     return (balance * percentage) / price
 
 def main():
+    global current_position
     client = Client(API_KEY, API_SECRET)
 
     buy_signal_count = 0
@@ -56,15 +63,27 @@ def main():
                 buy_signal_count = 0
                 sell_signal_count = 0
             
-            if buy_signal_count >= SIGNAL_THRESHOLD:
-                place_order(client, SYMBOL, 'BUY', quantity, current_price, STOP_LOSS_PERCENTAGE, TAKE_PROFIT_PERCENTAGE)
-                logging.info(f"BUY order placed for {quantity} {SYMBOL} at {current_price}")
-                send_telegram_message(f"BUY order placed for {quantity} {SYMBOL} at {current_price}")
+            if buy_signal_count >= SIGNAL_THRESHOLD and current_position != 'LONG':
+                if current_position == 'SHORT':
+                    place_order(client, SYMBOL, 'BUY', quantity, current_price, STOP_LOSS_PERCENTAGE, TAKE_PROFIT_PERCENTAGE, 'SHORT')  # 기존 숏 포지션 종료
+                    logging.info(f"CLOSE SHORT position for {quantity} {SYMBOL} at {current_price}")
+                    send_telegram_message(f"CLOSE SHORT position for {quantity} {SYMBOL} at {current_price}")
+
+                place_order(client, SYMBOL, 'BUY', quantity, current_price, STOP_LOSS_PERCENTAGE, TAKE_PROFIT_PERCENTAGE, 'LONG')
+                logging.info(f"BUY order placed for {quantity} {SYMBOL} at {current_price} for LONG position")
+                send_telegram_message(f"BUY order placed for {quantity} {SYMBOL} at {current_price} for LONG position")
+                current_position = 'LONG'
                 buy_signal_count = 0  # 거래 후 신호 카운트 초기화
-            elif sell_signal_count >= SIGNAL_THRESHOLD:
-                place_order(client, SYMBOL, 'SELL', quantity, current_price, STOP_LOSS_PERCENTAGE, TAKE_PROFIT_PERCENTAGE)
-                logging.info(f"SELL order placed for {quantity} {SYMBOL} at {current_price}")
-                send_telegram_message(f"SELL order placed for {quantity} {SYMBOL} at {current_price}")
+            elif sell_signal_count >= SIGNAL_THRESHOLD and current_position != 'SHORT':
+                if current_position == 'LONG':
+                    place_order(client, SYMBOL, 'SELL', quantity, current_price, STOP_LOSS_PERCENTAGE, TAKE_PROFIT_PERCENTAGE, 'LONG')  # 기존 롱 포지션 종료
+                    logging.info(f"CLOSE LONG position for {quantity} {SYMBOL} at {current_price}")
+                    send_telegram_message(f"CLOSE LONG position for {quantity} {SYMBOL} at {current_price}")
+
+                place_order(client, SYMBOL, 'SELL', quantity, current_price, STOP_LOSS_PERCENTAGE, TAKE_PROFIT_PERCENTAGE, 'SHORT')
+                logging.info(f"SELL order placed for {quantity} {SYMBOL} at {current_price} for SHORT position")
+                send_telegram_message(f"SELL order placed for {quantity} {SYMBOL} at {current_price} for SHORT position")
+                current_position = 'SHORT'
                 sell_signal_count = 0  # 거래 후 신호 카운트 초기화
         
         except Exception as e:
