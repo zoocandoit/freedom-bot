@@ -6,7 +6,7 @@ from trading_logic import generate_advanced_signals
 from trading_execution import place_order
 from telegram_alert import send_telegram_message
 from config import API_KEY, API_SECRET, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID
-from config import SYMBOL, ASSET, INTERVALS, SHORT_WINDOW, LONG_WINDOW, PERCENTAGE, SIGNAL_THRESHOLD, LONG_LEVERAGE, SHORT_LEVERAGE
+from config import SYMBOL, ASSET, INTERVALS, SHORT_WINDOW, LONG_WINDOW, SIGNAL_WINDOW, PERCENTAGE, LONG_LEVERAGE, SHORT_LEVERAGE
 from config import STOP_LOSS_PERCENTAGE, TAKE_PROFIT_PERCENTAGE
 
 # 로깅 설정
@@ -47,11 +47,27 @@ def main():
     while True:
         try:
             signals = []
+            min_length = None
             for interval in INTERVALS:
                 data = get_historical_data(client, SYMBOL, interval, "30 minutes ago UTC")
                 closing_prices = [float(kline[4]) for kline in data]
-                signals.append(generate_advanced_signals(closing_prices, SHORT_WINDOW, LONG_WINDOW)[-1])
+                signal = generate_advanced_signals(closing_prices, SHORT_WINDOW, LONG_WINDOW, SIGNAL_WINDOW)
+                signals.append(signal)
+                if min_length is None or len(signal) < min_length:
+                    min_length = len(signal)
 
+            # 모든 신호의 길이를 최소 길이에 맞추기
+            signals = [signal[-min_length:] for signal in signals]
+            combined_signals = []
+            for i in range(min_length):
+                interval_signals = [signal[i] for signal in signals]
+                if interval_signals.count('BUY') > interval_signals.count('SELL'):
+                    combined_signals.append('BUY')
+                elif interval_signals.count('SELL') > interval_signals.count('BUY'):
+                    combined_signals.append('SELL')
+                else:
+                    combined_signals.append('HOLD')
+            
             current_price = closing_prices[-1]
             balance = get_asset_balance(client, ASSET)
             if balance is None:
@@ -60,24 +76,9 @@ def main():
                 time.sleep(60)
                 continue
 
-            if signals.count('BUY') > signals.count('SELL'):
-                signal = 'BUY'
-            elif signals.count('SELL') > signals.count('BUY'):
-                signal = 'SELL'
-            else:
-                signal = 'HOLD'
+            logging.info(f"Current combined signal: {combined_signals[-1]}, Price: {current_price}, Balance: {balance}")
 
-            if signal == 'BUY':
-                buy_signal_count += 1
-                sell_signal_count = 0  # 매수 신호가 발생하면 매도 신호 카운트는 초기화
-            elif signal == 'SELL':
-                sell_signal_count += 1
-                buy_signal_count = 0  # 매도 신호가 발생하면 매수 신호 카운트는 초기화
-            else:
-                buy_signal_count = 0
-                sell_signal_count = 0
-
-            if buy_signal_count >= SIGNAL_THRESHOLD and current_position != 'LONG':
+            if combined_signals[-1] == 'BUY' and current_position != 'LONG':
                 if current_position == 'SHORT':
                     set_leverage(client, SYMBOL, SHORT_LEVERAGE)
                     quantity = calculate_quantity(balance, PERCENTAGE, current_price, SHORT_LEVERAGE)
@@ -91,8 +92,7 @@ def main():
                 logging.info(f"BUY order placed for {quantity} {SYMBOL} at {current_price} for LONG position")
                 send_telegram_message(f"BUY order placed for {quantity} {SYMBOL} at {current_price} for LONG position")
                 current_position = 'LONG'
-                buy_signal_count = 0  # 거래 후 신호 카운트 초기화
-            elif sell_signal_count >= SIGNAL_THRESHOLD and current_position != 'SHORT':
+            elif combined_signals[-1] == 'SELL' and current_position != 'SHORT':
                 if current_position == 'LONG':
                     set_leverage(client, SYMBOL, LONG_LEVERAGE)
                     quantity = calculate_quantity(balance, PERCENTAGE, current_price, LONG_LEVERAGE)
@@ -106,13 +106,12 @@ def main():
                 logging.info(f"SELL order placed for {quantity} {SYMBOL} at {current_price} for SHORT position")
                 send_telegram_message(f"SELL order placed for {quantity} {SYMBOL} at {current_price} for SHORT position")
                 current_position = 'SHORT'
-                sell_signal_count = 0  # 거래 후 신호 카운트 초기화
         
         except Exception as e:
             logging.error(f"An error occurred: {e}")
             send_telegram_message(f"An error occurred: {e}")
         
-        time.sleep(60)
+        time.sleep(900)  # 15분 대기
 
 if __name__ == "__main__":
     main()
